@@ -1,197 +1,284 @@
-# API Changes — v2.3.0 → v3.0.0
+# 📘 Guía de Integración Frontend — EasyDocs API (v3.3.0)
 
-> Documento orientado al frontend para actualizar la integración con la API.
-
----
-
-## Resumen
-
-| Versión | Fecha | Impacto API |
-|---------|-------|-------------|
-| 2.3.0 | 2026-04-22 | — |
-| 2.3.1 | 2026-05-01 | 🔧 Bugfix PDF |
-| 2.3.2 | 2026-05-09 | Sin cambios en API |
-| 2.4.0 | 2026-07-08 | Sin cambios en API |
-| 2.4.1 | 2026-07-18 | Sin cambios en API |
-| 2.5.0 | 2026-07-20 | Sin cambios en API |
-| **3.0.0** | **2026-07-25** | **⚠️ Nuevo `doc_type="multifile"`** |
+Esta guía contiene todas las especificaciones, formatos de petición, ejemplos en JavaScript (`fetch` y `axios`), y soluciones a los errores más comunes al conectar un Frontend (React, Vue, Vite, Next.js, etc.) con **EasyDocs API**.
 
 ---
 
-## Cambio principal en 3.0.0
+## 🌐 Configuración Base
 
-### Nuevo tipo de documento: `multifile`
+- **URL Base Local:** `http://127.0.0.1:5000` (o `http://localhost:5000`)
+- **Prefijo de Endpoints:** Todos los endpoints de la API comienzan con `/api/`
+- **CORS:** Habilitado para todos los orígenes en desarrollo.
 
-El endpoint `POST /api/upload-zip` ahora acepta `doc_type="multifile"`.
+---
 
-**Antes (v2.3.0 — v2.5.0):**
-```
-doc_type: "markdown" | "pdf" | "word"
-```
+## ⚠️ Los 4 Errores Más Comunes en el Frontend
 
-**Ahora (v3.0.0):**
-```
-doc_type: "markdown" | "pdf" | "word" | "multifile"
-```
+Antes de ver los endpoints, revisa si tu frontend tiene alguno de estos errores frecuentes:
 
-#### Comportamiento
+### 1. ❌ Especificar manualmente `'Content-Type': 'multipart/form-data'`
+- **Error:** Al enviar `FormData` con `fetch` o `axios`, si agregas manualmente `'Content-Type': 'multipart/form-data'`, eliminas el `boundary` que el navegador genera automáticamente. Flask no podrá leer `request.files` y devolverá `400 Bad Request (No file)`.
+- **Solución:** **NUNCA** pongas el header `Content-Type` cuando envíes un objeto `FormData`. Deja que el navegador lo establezca solo.
 
-| doc_type | Respuesta | Contenido |
-|----------|-----------|-----------|
-| `markdown` | Archivo `.md` (descarga) | Documentación consolidada |
-| `pdf` | Archivo `.pdf` (descarga) | Documentación consolidada |
-| `word` | Archivo `.docx` (descarga) | Documentación consolidada |
-| `multifile` | Archivo `.zip` (descarga) | N archivos `.md` (uno por chunk) |
+### 2. ❌ Intentar hacer `response.json()` en descargas de archivos
+- **Error:** Si solicitas un PDF o DOCX, la API devuelve un archivo binario (`blob`), no un JSON. Hacer `response.json()` arrojará `SyntaxError: Unexpected token in JSON`.
+- **Solución:** Verifica siempre `if (!response.ok)`. Si hay error, lee `response.json()`; si es exitoso, lee `response.blob()`.
 
-#### Formato de la respuesta (`multifile`)
+### 3. ❌ Olvidar el prefijo `/api`
+- **Error:** Llamar a `/upload-zip` o `/download/pdf`.
+- **Solución:** Las rutas correctas son `/api/upload-zip` y `/api/download/pdf`.
 
-```
-Content-Type: application/zip
-Content-Disposition: attachment; filename="documentacion_multifile_20260725_1430.zip"
-```
+### 4. ❌ Nombres incorrectos de campos en el formulario
+- La clave del archivo ZIP **debe** llamarse `"file"`.
+- El tipo de documento para Word **debe** ser `"word"` (en `/api/upload-zip`) o `"docx"` (en `/api/download/docx`).
 
-El `.zip` contiene uno o más archivos `.md` nombrados según los módulos que documentan:
+---
 
-```
-documentacion_multifile_20260725_1430.zip
-├── main.md
-├── auth+db.md
-├── api_routes+controllers.md
-└── utils_validate.md
-```
+## 📡 Endpoints de la API
 
-Cada `.md` contiene la documentación de un grupo lógico de archivos (un chunk).
+---
 
-#### Petición de ejemplo
+### 1. Previsualizar Contenido del ZIP (`/api/preview-zip`)
+Inspecciona qué archivos contiene el ZIP y cuáles son soportados sin llamar a los modelos de IA.
 
-```bash
-curl -X POST http://localhost:5000/api/upload-zip \
-  -F "file=@proyecto.zip" \
-  -F "doc_type=multifile" \
-  -F "extra_requirements=Incluir tablas de errores" \
-  -F "language=es"
-```
+- **Método:** `POST`
+- **URL:** `http://localhost:5000/api/preview-zip`
+- **Content-Type:** `multipart/form-data`
+- **Parámetros (`FormData`):**
+  - `file`: Archivo `.zip` (requerido).
 
-#### Manejo desde el frontend
-
+#### Ejemplo con JavaScript (`fetch`):
 ```javascript
-// Ejemplo con fetch
-const formData = new FormData();
-formData.append('file', zipFile);
-formData.append('doc_type', 'multifile');
-formData.append('language', 'es');
+async function previewZip(fileInput) {
+  const file = fileInput.files[0];
+  const formData = new FormData();
+  formData.append("file", file); // ⚠️ La clave DEBE ser "file"
 
-const response = await fetch('/api/upload-zip', {
-  method: 'POST',
-  body: formData,
-});
+  try {
+    const response = await fetch("http://localhost:5000/api/preview-zip", {
+      method: "POST",
+      body: formData,
+      // ⚠️ ¡NO agregues el header Content-Type aquí!
+    });
 
-if (response.ok) {
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `documentacion_multifile_${getDateString()}.zip`;
-  a.click();
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Error:", data.error, data.codigo_error);
+      alert(`Error: ${data.error}`);
+      return;
+    }
+
+    console.log("Archivos encontrados:", data);
+    // data es un Array: [{ file: "main.py", language: "py", valid: true, size: "1.2kb" }]
+    return data;
+  } catch (error) {
+    console.error("Error de red:", error);
+  }
 }
 ```
 
 ---
 
-## Endpoints (sin cambios desde 2.3.0)
+### 2. Subir ZIP y Generar Documentación (`/api/upload-zip`)
+Procesa el código dentro del ZIP mediante IA y genera la documentación consolidada.
 
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| `GET` | `/` | Información de la API |
-| `GET` | `/api/download` | Info de endpoints de descarga |
-| `POST` | `/api/download/<file_type>` | Documentar código pegado |
-| `POST` | `/api/preview-zip` | Previsualizar contenido de ZIP |
-| `POST` | `/api/upload-zip` | Documentar proyecto desde ZIP |
+- **Método:** `POST`
+- **URL:** `http://localhost:5000/api/upload-zip`
+- **Content-Type:** `multipart/form-data`
+- **Parámetros (`FormData`):**
+  - `file`: Archivo `.zip` (requerido).
+  - `doc_type`: Tipo de documento: `"markdown"` | `"pdf"` | `"word"` | `"multifile"` (opcional, default: `"markdown"`).
+  - `extra_requirements`: Instrucciones adicionales para la IA (opcional, string).
+  - `language`: Idioma destino: `"es"` o `"en"` (opcional, string).
 
----
+#### Ejemplo con JavaScript (`fetch`):
+```javascript
+async function generateDocsFromZip(file, docType = "pdf", extraReqs = "", lang = "es") {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("doc_type", docType); // "markdown", "pdf", o "word"
+  formData.append("extra_requirements", extraReqs);
+  formData.append("language", lang);
 
-## Parámetros comunes (sin cambios)
+  try {
+    const response = await fetch("http://localhost:5000/api/upload-zip", {
+      method: "POST",
+      body: formData,
+    });
 
-### `POST /api/download/<file_type>`
+    // 1. Si la API devolvió error (400, 413, 429, 500)
+    if (!response.ok) {
+      const errorJson = await response.json();
+      console.error("Error de API:", errorJson);
+      alert(`Error [${errorJson.codigo_error}]: ${errorJson.error}`);
+      return;
+    }
 
-```json
-// Content-Type: application/json
-{
-  "code": "def hello(): ...",
-  "extra": "Incluir ejemplos de uso",
-  "language": "es"
+    // 2. Si la petición fue exitosa, recibimos un archivo binario para descargar
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+
+    // Obtener nombre del archivo o usar default
+    const extension = docType === "pdf" ? "pdf" : docType === "word" ? "docx" : "md";
+    link.download = `documentacion.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+
+    console.log("¡Documentación descargada con éxito!");
+  } catch (error) {
+    console.error("Error de conexión:", error);
+  }
 }
 ```
 
-| Campo | Tipo | Obligatorio | Default |
-|-------|------|-------------|---------|
-| `code` | string | ✅ | — |
-| `extra` | string | ❌ | `""` |
-| `language` | string | ❌ | auto-detect (`"es"` o `"en"`) |
+---
 
-**Idioma también aceptado vía header `Accept-Language`:**
-```http
-Accept-Language: en
-Accept-Language: es
+### 3. Documentar Fragmento de Código Directo (`/api/download/<file_type>`)
+Genera documentación para un string de código fuente directo.
+
+- **Método:** `POST`
+- **URL:** `http://localhost:5000/api/download/<file_type>`
+  - `<file_type>`: `"pdf"` | `"markdown"` | `"docx"`
+- **Content-Type:** `application/json`
+- **Body (`JSON`):**
+  - `code`: Código fuente como string (mínimo 10 caracteres, requerido).
+  - `extra`: Requerimientos adicionales (opcional, string).
+  - `language`: Idioma destino: `"es"` o `"en"` (opcional, string).
+
+#### Ejemplo con JavaScript (`fetch`):
+```javascript
+async function documentCodeSnippet(sourceCode, fileType = "markdown") {
+  try {
+    const response = await fetch(`http://localhost:5000/api/download/${fileType}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        code: sourceCode,
+        extra: "Enfócate en explicar la complejidad algorítmica y endpoints",
+        language: "es",
+      }),
+    });
+
+    if (!response.ok) {
+      const errorJson = await response.json();
+      alert(`Error: ${errorJson.error}`);
+      return;
+    }
+
+    // Descarga del archivo generado
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `doc_${fileType}.${fileType === "markdown" ? "md" : fileType}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (error) {
+    console.error("Error:", error);
+  }
+}
 ```
-Si `language` no se envía en el body, se lee de `Accept-Language`. Si ninguno está presente, se usa detección automática por heurística de palabras clave en el código fuente.
-
-`<file_type>` acepta: `markdown`, `pdf`, `word`.
-
-### `POST /api/upload-zip`
-
-```yaml
-# Content-Type: multipart/form-data
-file: <binario>
-doc_type: "multifile"
-extra_requirements: "Incluir tablas de errores"
-language: "es"
-```
-
-| Campo | Tipo | Obligatorio | Default |
-|-------|------|-------------|---------|
-| `file` | file | ✅ | — |
-| `doc_type` | string | ❌ | `"markdown"` |
-| `extra_requirements` | string | ❌ | `""` |
-| `language` | string | ❌ | auto-detect |
-
-**Idioma también aceptado vía header `Accept-Language`:**
-```http
-Accept-Language: en
-Accept-Language: es
-```
-Si `language` no se envía en el form, se lee de `Accept-Language`. Si ninguno está presente, se usa detección automática.
-
-`doc_type` acepta: `markdown`, `pdf`, `word`, **`multifile`** (nuevo).
 
 ---
 
-## Códigos de error (sin cambios desde 2.3.0)
+## 🛡️ Manejo de Errores y Códigos de Estado
 
-| HTTP | `codigo_error` | Causa |
-|------|----------------|-------|
-| 400 | `NO_FILE` | No se envió archivo |
-| 400 | `INVALID_FILE_TYPE` | No es `.zip` |
-| 400 | `FILE_TOO_LARGE` | Excede 10MB |
-| 400 | `EMPTY_FILE` | ZIP vacío |
-| 400 | `INVALID_DOC_TYPE` | `doc_type` no válido |
-| 400 | `VALIDATION_ERROR` | Error de validación |
-| 500 | `PROCESSING_ERROR` | Error interno al procesar |
+La API responde siempre con códigos HTTP estándar y formato JSON en caso de error:
 
----
-
-## Mejoras internas (sin impacto en API)
-
-- **v2.4.0**: Chunking con split de archivos grandes. Backoff exponencial en reintentos de API.
-- **v2.5.0**: Provider abstraction layer (`BaseAIProvider`). Preparado para múltiples proveedores de IA.
-- **v3.0.0**: Skip de consolidación en modo multifile. Nombres de archivo descriptivos por chunk.
+| Código HTTP | `codigo_error` | Causa | Cómo manejarlo en el Frontend |
+|---|---|---|---|
+| **400** | `VALIDATION_ERROR` | ZIP corrupto, contiene más de 300 archivos, excede 40 MB descomprimido o rutas `../` | Mostrar `error` al usuario para que verifique el archivo ZIP |
+| **400** | `BAD_REQUEST` | El cuerpo de la petición está vacío o el código tiene menos de 10 caracteres | Validar que el usuario haya escrito código antes de enviar |
+| **413** | `PAYLOAD_TOO_LARGE` | El archivo subido excede el límite máximo de **15 MB** | Avisar al usuario: *"El archivo supera el tamaño máximo permitido de 15 MB"* |
+| **429** | `RATE_LIMIT_EXCEEDED` | Se superó el límite de la demo (**10 req/min** en IA, **30 req/min** en preview) | Leer `retry_after` del JSON o cabecera `Retry-After` y mostrar: *"Por favor espera X segundos para tu próxima solicitud"* |
+| **500** | `PROCESSING_ERROR` | Fallo interno en los proveedores de IA o consolidación | Notificar que intente nuevamente en unos instantes |
 
 ---
 
-## Historial de versiones de API
+## 📦 Ejemplo Completo en React / Vite
 
-| Versión API | `API_VERSION` en `/` |
-|-------------|---------------------|
-| 2.3.0 — 2.4.1 | `"2.4.1"` |
-| 2.5.0 | `"2.5.0"` |
-| 3.0.0 | `"3.0.0"` (pendiente de actualizar en `main.py`) |
+```jsx
+import React, { useState } from "react";
+
+export function DocumentationGenerator() {
+  const [file, setFile] = useState(null);
+  const [docType, setDocType] = useState("pdf");
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file) {
+      setErrorMessage("Por favor selecciona un archivo .zip");
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage("");
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("doc_type", docType);
+    formData.append("language", "es");
+
+    try {
+      const response = await fetch("http://localhost:5000/api/upload-zip", {
+        method: "POST",
+        body: formData, // ¡Sin headers manuales!
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Error al procesar el archivo");
+      }
+
+      // Descargar archivo resultante
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `documentacion.${docType === "word" ? "docx" : docType === "pdf" ? "pdf" : "md"}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setErrorMessage(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} style={{ maxWidth: 400, margin: "auto" }}>
+      <h2>Generar Documentación</h2>
+
+      {errorMessage && <div style={{ color: "red" }}>{errorMessage}</div>}
+
+      <input
+        type="file"
+        accept=".zip"
+        onChange={(e) => setFile(e.target.files[0])}
+      />
+
+      <select value={docType} onChange={(e) => setDocType(e.target.value)}>
+        <option value="markdown">Markdown (.md)</option>
+        <option value="pdf">PDF (.pdf)</option>
+        <option value="word">Word (.docx)</option>
+      </select>
+
+      <button type="submit" disabled={loading}>
+        {loading ? "Procesando con IA..." : "Generar Documentación"}
+      </button>
+    </form>
+  );
+}
+```
