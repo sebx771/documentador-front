@@ -58,6 +58,13 @@
             <option value="word">Word</option>
           </select>
         </div>
+        <div class="field">
+          <label class="label" for="select-idioma-codigo">Idioma</label>
+          <select id="select-idioma-codigo" class="select">
+            <option value="es">Español</option>
+            <option value="en">Inglés</option>
+          </select>
+        </div>
       </div>
 
       <div class="field">
@@ -71,10 +78,9 @@
       </div>
 
       <button id="btn-descargar" class="btn btn--primary">
-          <span id="btn-descargar-text">Generar y descargar</span>
-          <span id="spinner-codigo" class="spinner hidden"></span>
-        </button>
-      </div>
+        <span id="btn-descargar-text">Generar y descargar</span>
+        <span id="spinner-codigo" class="spinner hidden"></span>
+      </button>
 
       <div id="msg-codigo" class="message hidden"></div>
 
@@ -113,6 +119,13 @@
               <option value="pdf">PDF</option>
               <option value="word">Word</option>
               <option value="multifile">Multifile (.md por chunk)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="select-idioma-zip">Idioma</label>
+            <select id="select-idioma-zip" class="select">
+              <option value="es">Español</option>
+              <option value="en">Inglés</option>
             </select>
           </div>
         </div>
@@ -160,6 +173,13 @@
             <option value="word">Word</option>
           </select>
         </div>
+        <div class="field">
+          <label class="label" for="select-idioma-archivo">Idioma</label>
+          <select id="select-idioma-archivo" class="select">
+            <option value="es">Español</option>
+            <option value="en">Inglés</option>
+          </select>
+        </div>
       </div>
 
       <div class="field">
@@ -184,7 +204,7 @@
   </main>
 
   <footer class="footer">
-    <span>EasyDocs API v1.1.0</span>
+    <span>EasyDocs API v3.3.0</span>
   </footer>
 
   <script type="module" src="js/app/main.js"></script>

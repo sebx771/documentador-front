@@ -5,6 +5,7 @@ export function initCodeFlow() {
   const elements = {
     codeInput: document.getElementById('input-codigo'),
     formatSelect: document.getElementById('select-formato'),
+    languageSelect: document.getElementById('select-idioma-codigo'),
     extraInput: document.getElementById('input-extra-codigo'),
     button: document.getElementById('btn-descargar'),
     buttonLabel: document.getElementById('btn-descargar-text'),
@@ -12,9 +13,14 @@ export function initCodeFlow() {
     message: document.getElementById('msg-codigo')
   };
 
+  if (elements.languageSelect) {
+    elements.languageSelect.value = (navigator.language || 'es').startsWith('en') ? 'en' : 'es';
+  }
+
   elements.button.addEventListener('click', async () => {
     const code = elements.codeInput.value.trim();
     const format = elements.formatSelect.value;
+    const language = elements.languageSelect ? elements.languageSelect.value : (navigator.language || 'es').split('-')[0];
     const extra = elements.extraInput.value.trim();
 
     if (!validateCode(code, elements.message)) return;
@@ -23,7 +29,7 @@ export function initCodeFlow() {
     setVisible(elements.message, false);
 
     try {
-      const blob = await apiClient.generateFromCode(code, format, extra);
+      const blob = await apiClient.generateFromCode(code, format, extra, language);
       const filename = getFilename(format);
       downloadBlob(blob, filename);
       showMessage(elements.message, `¡Documentación generada! Descargando ${filename}...`, 'success');
@@ -42,7 +48,7 @@ function validateCode(code, messageElement) {
   }
 
   if (code.length < 10) {
-    showMessage(messageElement, 'El código es demasiado corto.', 'error');
+    showMessage(messageElement, 'El código debe tener al menos 10 caracteres.', 'error');
     return false;
   }
 

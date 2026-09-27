@@ -26,6 +26,7 @@ export function downloadBlob(blob, filename) {
 const EXTENSIONS = {
   pdf: 'pdf',
   word: 'docx',
+  docx: 'docx',
   markdown: 'md',
   multifile: 'zip'
 };

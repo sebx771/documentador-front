@@ -17,9 +17,14 @@ export function initZipFlow() {
     processLabel: document.getElementById('btn-procesar-text'),
     processSpinner: document.getElementById('spinner-zip'),
     docTypeSelect: document.getElementById('select-doc-type'),
+    languageSelect: document.getElementById('select-idioma-zip'),
     extraInput: document.getElementById('input-extra'),
     message: document.getElementById('msg-zip')
   };
+
+  if (elements.languageSelect) {
+    elements.languageSelect.value = (navigator.language || 'es').startsWith('en') ? 'en' : 'es';
+  }
 
   let selectedFile = null;
 
@@ -29,9 +34,15 @@ export function initZipFlow() {
     filenameElement: elements.filename,
     messageElement: elements.message,
     validate(file) {
-      if (file.name.toLowerCase().endsWith('.zip')) return true;
-      showMessage(elements.message, 'Solo se permiten archivos .zip', 'error');
-      return false;
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        showMessage(elements.message, 'Solo se permiten archivos .zip', 'error');
+        return false;
+      }
+      if (file.size > 15 * 1024 * 1024) {
+        showMessage(elements.message, 'El archivo ZIP supera el tamaño máximo permitido de 15 MB.', 'error');
+        return false;
+      }
+      return true;
     },
     onFile(file) {
       selectedFile = file;
@@ -44,11 +55,12 @@ export function initZipFlow() {
   elements.previewButton.addEventListener('click', async () => {
     if (!selectedFile) return;
 
+    const language = elements.languageSelect ? elements.languageSelect.value : (navigator.language || 'es').split('-')[0];
     setLoading(elements.previewButton, elements.previewLabel, elements.previewSpinner, true);
     setVisible(elements.message, false);
 
     try {
-      const data = await apiClient.previewZip(selectedFile);
+      const data = await apiClient.previewZip(selectedFile, language);
       renderZipPreview(elements.fileList, data);
       setVisible(elements.options, true);
     } catch (error) {
@@ -62,8 +74,8 @@ export function initZipFlow() {
     if (!selectedFile) return;
 
     const docType = elements.docTypeSelect.value;
+    const language = elements.languageSelect ? elements.languageSelect.value : (navigator.language || 'es').split('-')[0];
     const extra = elements.extraInput.value.trim();
-    const language = (navigator.language || 'es').split('-')[0];
     setLoading(elements.processButton, elements.processLabel, elements.processSpinner, true);
     setVisible(elements.message, false);
 
